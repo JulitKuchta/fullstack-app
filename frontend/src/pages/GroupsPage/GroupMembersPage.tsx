@@ -9,6 +9,7 @@ import AddGroupTransaction from "./AddGroupTransaction";
 import ConfirmModal from "../../components/ConfirmModal/ConfirmModal";
 import { toast } from "react-toastify";
 import { useBalance } from "../../components/BalanceBar/useBalance";
+import { useNavigate, useParams } from "react-router-dom";
 
 interface Group {
   id: number;
@@ -24,8 +25,8 @@ interface Member {
 }
 
 interface Props {
-  group: Group;
-  onBack: () => void;
+  group?: Group;
+  onBack?: () => void;
 }
 
 interface Debt {
@@ -38,7 +39,7 @@ interface Debt {
   confirmedByCreditor: boolean;
 }
 
-const GroupMembersPage: React.FC<Props> = ({ group, onBack }) => {
+const GroupMembersPage: React.FC<Props> = (props) => {
   const { user } = useAuth();
   const [members, setMembers] = useState<Member[]>([]);
   const [newMemberEmail, setNewMemberEmail] = useState("");
@@ -46,20 +47,46 @@ const GroupMembersPage: React.FC<Props> = ({ group, onBack }) => {
   const [selectedMemberId, setSelectedMemberId] = useState<number | null>(null);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const { refreshBalance } = useBalance();
+  const { groupId } = useParams();
+  const navigate = useNavigate();
+  const [group, setGroup] = useState<Group | null>(null);
+
+  // Użyj propsów jeśli istnieją, w przeciwnym razie użyj wartości z URL i nawigacji
+  const currentGroup = props.group || (group as Group);
+  const handleBack = props.onBack || (() => navigate('/groups'));
+
   useEffect(() => {
+    if (!props.group && groupId) {
+      // Pobierz grupę, jeśli nie została przekazana jako prop
+      fetchGroup();
+    }
     fetchMembers();
-  }, [group]);
+  }, [groupId, props.group]);
+
+  const fetchGroup = async () => {
+    try {
+      const data = await groupsApi.getGroup(Number(groupId));
+      setGroup(data);
+    } catch (error) {
+      console.error("Błąd pobierania grupy:", error);
+      navigate('/groups');
+    }
+  };
 
   const fetchMembers = async () => {
-    const data = await groupsApi.getGroupMembers(group.id);
-    const debtsData = await groupsApi.getDebts(group.id);
+    const id = props.group?.id || Number(groupId);
+    if (!id) return;
+
+    const data = await groupsApi.getGroupMembers(id);
+    const debtsData = await groupsApi.getDebts(id);
     setDebts(debtsData);
     setMembers(data);
   };
 
   const handleAddMember = async () => {
     try {
-      await groupsApi.addMember(group.id, newMemberEmail);
+      const id = currentGroup?.id || Number(groupId);
+      await groupsApi.addMember(id, newMemberEmail);
       setNewMemberEmail("");
       fetchMembers();
     } catch (error: any) {
@@ -96,12 +123,17 @@ const GroupMembersPage: React.FC<Props> = ({ group, onBack }) => {
     fetchMembers(); // odśwież dane
   };
 
+  // Jeśli używamy komponentu przez routing i grupa jest jeszcze ładowana
+  if (!props.group && !group) {
+    return <div className={styles.container}>Ładowanie...</div>;
+  }
+
   return (
     <div className={styles.container}>
-      <button onClick={onBack} className={styles.backButton}>
+      <button onClick={handleBack} className={styles.backButton}>
         Wróć do grup
       </button>
-      <h2>Członkowie grupy: {group.name}</h2>
+      <h2>Członkowie grupy: {currentGroup.name}</h2>
 
       <div className={styles.form}>
         <input
@@ -119,19 +151,19 @@ const GroupMembersPage: React.FC<Props> = ({ group, onBack }) => {
       </div>
 
       <AddGroupTransaction
-        groupId={group.id}
+        groupId={currentGroup.id}
         onTransactionAdded={fetchMembers}
       />
       <ul className={styles.memberList}>
         {members.map((member) => (
           <li key={member.id}>
             {member.userEmail}
-            {member.userId === group.ownerId && (
+            {member.userId === currentGroup.ownerId && (
               <>
                 <span className={styles.adminLabel}>(admin)</span>
               </>
             )}
-            {user?.id == group.ownerId && member.userId !== group.ownerId && (
+            {user?.id == currentGroup.ownerId && member.userId !== currentGroup.ownerId && (
               <button
                 onClick={() => {
                   setSelectedMemberId(member.id);

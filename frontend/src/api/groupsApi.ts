@@ -15,6 +15,20 @@ export const groupsApi = {
     return response.data.myGroups;
   },
 
+  getGroup: async (groupId: number) => {
+    const query = `
+      query($groupId: ID!) {
+        group(id: $groupId) {
+          id
+          name
+          ownerId
+        }
+      }
+    `;
+    const response = await graphqlClient(query, { groupId });
+    return response.data.group;
+  },
+
   createGroup: async (name: string) => {
     const mutation = `
       mutation CreateGroup($groupDTO: GroupInput!) {
